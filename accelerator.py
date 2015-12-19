@@ -3,6 +3,7 @@ from gevent.wsgi import WSGIServer
 import re
 # import requests
 import socket
+import ssl
 
 app = Flask(__name__)
 
@@ -28,16 +29,55 @@ def get_headers(req):
 		return method, url, headers, ''
 
 
-def get_host_port(req):
+def get_host_port(req, https=False):
 	host = host_p.findall(req)[0]
 	if ':' in host:
 		host_without_port = host.split(':')[0]
 		port = int(host.split(':')[1])
 		return host_without_port, port
 	else:
-		port = 80
+		port = 443 if https else 80
 		return host, port
+
+
+# def get_resp_with_ssl(req):
+# 	print(req)
+# 	host, port = get_host_port(req)
+# 	# s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+# 	s = ssl.wrap_socket(socket.socket())
+# 	s.connect((host, port))
+# 	print('ssl contfinish')
+# 	s.sendall(req.encode('utf-8'))
 	
+# 	resp = b''
+# 	buf = 1
+# 	while buf:
+# 		buf = s.recv(1024*1024*8)
+# 		resp += buf
+# 	return resp
+
+
+def get_resp(req, https=False):
+	# req = request.form['req']
+	print(req)
+	host, port = get_host_port(req, https)
+	if https:
+		s = ssl.wrap_socket(socket.socket())
+	else:
+		s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+	s.connect((host, port))
+	s.sendall(req.encode('utf-8'))
+	print('ssl connect finish')
+	
+	resp = b''
+	buf = 1
+	while buf:
+		buf = s.recv(1024*1024*8)
+		print(buf[-50:])
+		resp += buf
+	return resp
+
+
 # s = requests.session()
 # resp = [ 'Server', 'Date', 'Content-Type', 'Vary', 'Expires',
 # 		'cache-control' ]
@@ -45,20 +85,16 @@ def get_host_port(req):
 def accelerator():
 	if request.method == 'GET':
 		return 'Railgun.'
-	else:
-		req = request.form['req']
-		host, port = get_host_port(req)
-		s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-		s.connect((host, port))
-		s.sendall(req.encode('utf-8'))
-		resp = b''
-		while 1:
-			buf = s.recv(1024*1024*8)
-			if not buf:
-				break
-			# print(buf[-200:])
-			resp += buf
-		return resp
+	elif request.method == 'POST':
+		if request.form.get('ssl'):
+			print('ssl')
+			# print(request.form['req'])
+			return get_resp(request.form['req'], https=True)
+		else:
+			return get_resp(request.form['req'])
+	# elif request.method == 'CONNECT':
+		# return
+
 		
 		method, url, headers, data = get_headers(request.form['req'])
 		if method == 'GET':

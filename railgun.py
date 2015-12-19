@@ -4,6 +4,7 @@ from threading import Thread
 from multiprocessing import Process
 import re
 import requests
+import ssl
 
 
 def parse_header(raw_headers):
@@ -28,7 +29,7 @@ def parse_header(raw_headers):
 
 
 host_p = re.compile('http://.+?/')
-def get_header_met_addr(conn):
+def get_rawheader_met(conn):
 	headers = ''
 	while 1:
 		buf = conn.recv(2048).decode('utf-8')
@@ -39,24 +40,65 @@ def get_header_met_addr(conn):
 
 	method, version, scm, address, path, params, query, fragment =\
 		parse_header(headers)
-	headers = headers.replace(
-		'Proxy-Connection: keep-alive', 'Connection: close')
+	return headers, method
+
+
+def get_headers(raw_headers):
+	headers = raw_headers.replace(
+		'Proxy-Connection: keep-alive', 'Connection: close'
+		).replace(
+			'keep-alive', 'close'
+			)
 	headers = host_p.sub('/', headers)
-	return headers, method, address
+	return headers
 
 
 s = requests.session()
+context = ssl.SSLContext(ssl.PROTOCOL_TLSv1)
+# context.load_cert_chain(certfile="cacert.pem", keyfile="CA.crt")
+context.load_cert_chain(certfile="server1.pem", keyfile="server.key")
+def get_resp_for_ssl(connect):
+	# while 1:
+	conn = context.wrap_socket(connect, server_side = True)
+	req = b''
+	buf = 1
+	while buf:
+		buf = conn.read()
+		print(buf)
+		req += buf
+		if req.endswith(b'\r\n\r\n'):
+			req = get_headers(req.decode('utf-8'))
+			print(req)
+			r = s.post('http://127.0.0.1:8080', data={'req':req,'ssl':1})
+			conn.send(r.content)
+			break
+	conn.shutdown(socket.SHUT_RDWR)
+	conn.close()
+
+
 def handle_connection(conn):
 	# 从socket读取头
 	# print(conn)
-	req_headers, method, address = get_header_met_addr(conn)
-	print(repr(req_headers))
-	r = s.post('http://127.0.0.1:8080', data={'req':req_headers})
-	# r = s.post('https://mc-bieber.rhcloud.com', data={'req':req_headers})
-	# print(r.content)
-	conn.sendall(r.content)
-	conn.close()
+	raw_headers, method = get_rawheader_met(conn)
+	# print(repr(req_headers))
+	if method == 'CONNECT':
+		conn.sendall(b'HTTP/1.1 200 Connection established\r\n\r\n')
+		print('发给浏览器连接确认')
+		get_resp_for_ssl(conn)
+
+	else:
+		headers = get_headers(raw_headers)
+		r = s.post('http://127.0.0.1:8080', data={'req':headers})
+		# r = s.post('https://mc-bieber.rhcloud.com', data={'req':req_headers})
+		# print(r.content)
+		# r = s.post('http://127.0.0.1:8080', data={'req':req})
+		# return r.content
+		conn.sendall(r.content)
+		conn.close()
 	exit()
+
+
+	
 	# print(address, req_headers)
 	soc = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 	# soc.settimeout(1)
@@ -133,7 +175,7 @@ def server():
 	while 1:
 		try:
 			conn, addr = s.accept()
-			print(addr)
+			# print(addr)
 			Thread(target=handle_connection,args=(conn,)).start()
 			# handle_connection(conn)
 		except KeyboardInterrupt:
