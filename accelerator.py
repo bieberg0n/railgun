@@ -4,29 +4,32 @@ import re
 # import requests
 import socket
 import ssl
+from gevent import monkey
+monkey.patch_socket()
+# monkey.patch_ssl()
 
 app = Flask(__name__)
 
 path_p = re.compile('^.+? (.+?) ')
 host_p = re.compile('Host: (.+?)\r')
-def get_headers(req):
-	# print(req)
-	headers_raw = req.split('\r\n\r\n')[0].split('\r\n')
-	method = headers_raw[0].split(' ')[0]
-	headers = { i.split(': ')[0]:i.split(': ')[1]
-				for i in headers_raw[2:]
-				if i != ''# and 'GET' not in i and 'Host' not in i
-				# and 'POST' not in i and 'CONNECT' not in i
-				}
-	url = host_p.findall(req)[0] + path_p.findall(req)[0]
-	if method == 'POST':
-		data = req.split('\r\n\r\n')[1].split('&')
-		data = { i.split('=')[0]:i.split('=')[1] for i in data }
-		print(url, headers, data)
-		return method, url, headers, data
-	else:
-		print(method, url)
-		return method, url, headers, ''
+# def get_headers(req):
+# 	# print(req)
+# 	headers_raw = req.split('\r\n\r\n')[0].split('\r\n')
+# 	method = headers_raw[0].split(' ')[0]
+# 	headers = { i.split(': ')[0]:i.split(': ')[1]
+# 				for i in headers_raw[2:]
+# 				if i != ''# and 'GET' not in i and 'Host' not in i
+# 				# and 'POST' not in i and 'CONNECT' not in i
+# 				}
+# 	url = host_p.findall(req)[0] + path_p.findall(req)[0]
+# 	if method == 'POST':
+# 		data = req.split('\r\n\r\n')[1].split('&')
+# 		data = { i.split('=')[0]:i.split('=')[1] for i in data }
+# 		print(url, headers, data)
+# 		return method, url, headers, data
+# 	else:
+# 		print(method, url)
+# 		return method, url, headers, ''
 
 
 def get_host_port(req, https=False):
@@ -59,22 +62,48 @@ def get_host_port(req, https=False):
 
 def get_resp(req, https=False):
 	# req = request.form['req']
-	print(req)
+	# print(req.split('\r\n')[0])
+	url = '{host}{path}'.format(
+		host = req.split('\r\n')[1].split(' ')[1],
+		path = req.split('\r\n')[0].split(' ')[1])
+		# req.split('\r\n')[1].split(' ')[1]
+	info = '{method} {url}'.format(
+		method = req.split(' ')[0], url = url)
+	print(info)
 	host, port = get_host_port(req, https)
 	if https:
-		s = ssl.wrap_socket(socket.socket())
+		s = ssl.wrap_socket(socket.socket(),
+							ssl_version=ssl.PROTOCOL_TLSv1)
+		s.settimeout(5)
 	else:
 		s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-	s.connect((host, port))
+	# print(host, port, req)
+	try:
+		s.connect((host, port))
+		print('connect ok')
+	except socket.timeout as e:
+			print(e)
+			return
 	s.sendall(req.encode('utf-8'))
-	print('ssl connect finish')
+	print('send ok')
 	
 	resp = b''
-	buf = 1
-	while buf:
-		buf = s.recv(1024*1024*8)
-		print(buf[-50:])
+	# buf = b'1'
+	while 1:
+		# buf and not buf.startswith(b'WebSocket')\
+		  # and not buf.endswith(b'\r\n\r\n'):
+		try:
+			buf = s.recv(1024*8)
+		except socket.timeout as e:
+			print(e)
+			break
+		
+		print('{}......{}'.format(buf[:50],buf[-50:]))
 		resp += buf
+		if not buf or\
+		   buf.startswith(b'WebSocket') and buf.endswith(b'\r\n\r\n'):
+			break
+	print('RECV {}'.format(url))
 	return resp
 
 
@@ -132,6 +161,7 @@ def accelerator():
 		# return r.content
 
 
-# http_server = WSGIServer(('', 8080), app)
-# http_server.serve_forever()
-app.run(host='127.0.0.1', port=8080, debug=True)
+http_server = WSGIServer(('', 8080), app)
+# http_server = WSGIServer(('127.12.99.1', 8080), app)
+http_server.serve_forever()
+# app.run(host='127.0.0.1', port=8080, debug=True)

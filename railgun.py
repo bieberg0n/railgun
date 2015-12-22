@@ -5,7 +5,7 @@ from multiprocessing import Process
 import re
 import requests
 import ssl
-
+from certutil import CertUtil
 
 def parse_header(raw_headers):
 	request_lines = raw_headers.split('\r\n')
@@ -28,7 +28,6 @@ def parse_header(raw_headers):
 	return method, version, scm, address, path, params, query, fragment
 
 
-host_p = re.compile('http://.+?/')
 def get_rawheader_met(conn):
 	headers = ''
 	while 1:
@@ -43,34 +42,50 @@ def get_rawheader_met(conn):
 	return headers, method
 
 
+host_p = re.compile('http://.+?/')
+connection_p = re.compile('Connection: .+?\r')
 def get_headers(raw_headers):
 	headers = raw_headers.replace(
 		'Proxy-Connection: keep-alive', 'Connection: close'
-		).replace(
-			'keep-alive', 'close'
-			)
+		)# .replace(
+		 # 	'keep-alive', 'close'
+		 # 	)
+	headers = connection_p.sub('Connection: Close\r', headers)
 	headers = host_p.sub('/', headers)
 	return headers
 
 
 s = requests.session()
-context = ssl.SSLContext(ssl.PROTOCOL_TLSv1)
 # context.load_cert_chain(certfile="cacert.pem", keyfile="CA.crt")
-context.load_cert_chain(certfile="server1.pem", keyfile="server.key")
-def get_resp_for_ssl(connect):
+commonname_p = re.compile('Host: (.+?)\r')
+def get_resp_for_ssl(connect, raw_headers):
 	# while 1:
+	host = commonname_p.findall(raw_headers)[0]
+	print(host)
+	# context.load_cert_chain(certfile=".zhihu.com.pem")#, keyfile="go.key")
+	# file = CertUtil.get_cert(host)
+	# print(file)
+	context = ssl.SSLContext(ssl.PROTOCOL_TLSv1)
+	# context.load_cert_chain(certfile='certs/.baidu.com.crt')
+	context.load_cert_chain(certfile=CertUtil.get_cert(host))
 	conn = context.wrap_socket(connect, server_side = True)
 	req = b''
 	buf = 1
 	while buf:
-		buf = conn.read()
+		buf = conn.recv(1024*8)
 		print(buf)
 		req += buf
-		if req.endswith(b'\r\n\r\n'):
+		if not req.startswith(b'POST') and b'\r\n\r\n' in req\
+		   or req.startswith(b'POST') and 1< len(buf) < 2048\
+		   and not buf.endswith(b'\r\n\r\n'):
+		# if 1< len(buf) < 2048:
+		# if not buf:
 			req = get_headers(req.decode('utf-8'))
 			print(req)
-			r = s.post('http://127.0.0.1:8080', data={'req':req,'ssl':1})
-			conn.send(r.content)
+			r = s.post('http://127.0.0.1:8080',
+			# r = s.post('https://mc-bieber.rhcloud.com/',
+					   data={'req':req,'ssl':1})
+			conn.sendall(r.content)
 			break
 	conn.shutdown(socket.SHUT_RDWR)
 	conn.close()
@@ -84,12 +99,12 @@ def handle_connection(conn):
 	if method == 'CONNECT':
 		conn.sendall(b'HTTP/1.1 200 Connection established\r\n\r\n')
 		print('发给浏览器连接确认')
-		get_resp_for_ssl(conn)
+		get_resp_for_ssl(conn, raw_headers)
 
 	else:
 		headers = get_headers(raw_headers)
 		r = s.post('http://127.0.0.1:8080', data={'req':headers})
-		# r = s.post('https://mc-bieber.rhcloud.com', data={'req':req_headers})
+		# r = s.post('https://mc-bieber.rhcloud.com', data={'req':headers})
 		# print(r.content)
 		# r = s.post('http://127.0.0.1:8080', data={'req':req})
 		# return r.content
@@ -169,9 +184,9 @@ def handle_connection(conn):
 def server():
 	s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 	s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-	s.bind(('127.0.0.1', 8000))
+	s.bind(('0.0.0.0', 8087))
 	s.listen(1500)
-	print("Serving at 127.0.0.1:8000")
+	print("Serving at 0.0.0.0:8087")
 	while 1:
 		try:
 			conn, addr = s.accept()
