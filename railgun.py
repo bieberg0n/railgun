@@ -1,13 +1,17 @@
-import socket
+# import socket
 from urllib.parse import urlparse#, urlunparse
-from threading import Thread
+# from threading import Thread
 # from multiprocessing import Process
 import re
+import os
 import requests
-import ssl
+# import ssl
 from certutil import CertUtil
 import time
 # import queue
+from gevent import ssl, monkey
+from gevent.server import StreamServer
+monkey.patch_socket()
 
 def parse_header(raw_headers):
 	request_lines = raw_headers.split('\r\n')
@@ -61,8 +65,9 @@ def get_headers(raw_headers):
 		 # 	'keep-alive', 'close'
 		 # 	)
 	headers = connection_p.sub('Connection: Close\r', headers)
-	headers = host_p.sub('/', headers)
-	return headers
+	headers = headers.split('\n')
+	headers[0] = host_p.sub('/', headers[0])
+	return '\n'.join(headers)
 
 
 s = requests.session()
@@ -126,8 +131,9 @@ def handle_connection(conn, addr):
 		# r = s.post('https://mc-bieber.rhcloud.com/',
 		if req:
 			try:
-				r = s.post('http://bjgong.tk:8080',
-						   data={'req':req,'ssl':1})
+				r = s.post('http://rss.bjgong.tk/proxy', data={'req':req,'ssl':1}, stream=True)
+				# r = s.post('http://bjgong.tk:8080/proxy', data={'req':req,'ssl':1})
+				# r = s.post('http://127.0.0.1:8080/proxy', data={'req':req,'ssl':1})
 			except requests.exceptions.ConnectionError:
 				conn.close()
 				return
@@ -142,7 +148,9 @@ def handle_connection(conn, addr):
 		req = get_headers(raw_headers)
 		# r = s.post('http://127.0.0.1:8080', data={'req':headers})
 		try:
-			r = s.post('http://bjgong.tk:8080', data={'req':req})
+			r = s.post('http://rss.bjgong.tk/proxy', data={'req':req}, stream=True)
+			# r = s.post('http://bjgong.tk:8080/proxy', data={'req':req})
+			# r = s.post('http://127.0.0.1:8080/proxy', data={'req':req})
 		except requests.exceptions.ConnectionError:
 			conn.close()
 			return
@@ -152,7 +160,8 @@ def handle_connection(conn, addr):
 		# r = s.post('http://127.0.0.1:8080', data={'req':req})
 		# return r.content
 	# if r:
-	conn.sendall(r.content)
+	for resp in r.iter_content(chunk_size=1024*8):
+		conn.sendall(resp)
 	# else:
 	# 	pass
 	method, full_path, host = parse_header(req)
@@ -164,32 +173,41 @@ def handle_connection(conn, addr):
 	conn.close()
 
 
-def server():
-	s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-	s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-	s.bind(('0.0.0.0', 8087))
-	s.listen(1500)
-	print("Serving at 0.0.0.0:8087")
-	# queue_list = [ queue.Queue() for i in range(6) ]
-	# for i in range(6):
-	# 	t = Thread(target=handle_connection,args=(queue_list[i],
-	# 											  i,))
-	# 	t.setDaemon(True)
-	# 	t.start()
+# def server():
+# 	s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+# 	s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+# 	s.bind(('0.0.0.0', 8087))
+# 	s.listen(1500)
+# 	print("Serving at 0.0.0.0:8087")
+# 	# queue_list = [ queue.Queue() for i in range(6) ]
+# 	# for i in range(6):
+# 	# 	t = Thread(target=handle_connection,args=(queue_list[i],
+# 	# 											  i,))
+# 	# 	t.setDaemon(True)
+# 	# 	t.start()
 
-	while 1:
-		# for q in queue_list:
-		try:
-			conn, addr = s.accept()
-			# q.put((conn,addr))
-			# print(addr)
-			Thread(target=handle_connection,args=(conn,addr,)).start()
-			# handle_connection(conn)
-		except KeyboardInterrupt:
-			s.close()
-			print("Bye...")
-			# break
-			return
+# 	while 1:
+# 		# for q in queue_list:
+# 		try:
+# 			conn, addr = s.accept()
+# 			# q.put((conn,addr))
+# 			# print(addr)
+# 			Thread(target=handle_connection,args=(conn,addr,)).start()
+# 			# handle_connection(conn)
+# 		except KeyboardInterrupt:
+# 			s.close()
+# 			print("Bye...")
+# 			# break
+# 			return
 
 if __name__ == '__main__':
-	server()
+	# server()
+	if os.path.isfile('CA.crt'):
+		pass
+	else:
+		CertUtil.dump_ca()
+	if os.path.isdir('certs'):
+		pass
+	else:
+		os.mkdir('certs')
+	StreamServer( ('0.0.0.0', 8087), handle_connection ).serve_forever()

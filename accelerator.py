@@ -1,7 +1,10 @@
 from flask import Flask, request
 from gevent.wsgi import WSGIServer
 import re
-from gevent import socket, ssl
+# import socket
+from gevent import ssl, socket#,monkey
+from socket import getaddrinfo
+# monkey.patch_socket
 import time
 
 app = Flask(__name__)
@@ -61,7 +64,27 @@ def get_resp(req, https=False):
 	return resp, info
 
 
-@app.route('/', methods=['GET', 'POST'])
+def getip(name):
+	try:
+		ip = getaddrinfo(name,None)[0][-1][0]
+	except socket.gaierror:
+		# pass
+		ip = '127.0.0.1'
+	return ip
+
+
+@app.route('/',methods=['GET','POST'])
+def index():
+	if request.method == 'GET':
+		return 'Welcome to bjdns!'
+	elif request.method == 'POST':
+		if request.form.get('n'):
+			return getip(request.form['n'])
+		else:
+			return 'None'
+
+
+@app.route('/proxy', methods=['GET', 'POST'])
 def accelerator():
 	if request.method == 'GET':
 		return 'Railgun.'
@@ -78,7 +101,7 @@ def accelerator():
 		return resp
 
 
-http_server = WSGIServer(('', 8080), app)
-# http_server = WSGIServer(('127.12.99.1', 8080), app)
+# http_server = WSGIServer(('', 8080), app)
+http_server = WSGIServer(('127.12.99.1', 8080), app)
 http_server.serve_forever()
 # app.run(host='127.0.0.1', port=8080, debug=True)
