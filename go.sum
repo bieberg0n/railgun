@@ -1,0 +1,4 @@
+github.com/songgao/packets v0.0.0-20160404182456-549a10cd4091 h1:1zN6ImoqhSJhN8hGXFaJlSC8msLmIbX8bFqOfWLKw0w=
+github.com/songgao/packets v0.0.0-20160404182456-549a10cd4091/go.mod h1:N20Z5Y8oye9a7HmytmZ+tr8Q2vlP0tAHP13kTHzwvQY=
+github.com/songgao/water v0.0.0-20190402020555-6ad6edefb15c h1:VZsL/fAl8XnHj5Zn+cRvLcFbMHmCj7tdPrkKZSRziJ0=
+github.com/songgao/water v0.0.0-20190402020555-6ad6edefb15c/go.mod h1:P5HUIBuIWKbyjl083/loAegFkfbFNx5i2qEP4CNbm7E=
