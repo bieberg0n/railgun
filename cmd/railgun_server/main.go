@@ -17,6 +17,7 @@ var (
 type RailgunServer struct {
 	listenIP net.IP
 	ipNet *net.IPNet
+	udpServ *net.UDPConn
 	ipSrcMap map[string] *net.UDPAddr
 }
 
@@ -51,19 +52,22 @@ func (s *RailgunServer) handle(p []byte, from *net.UDPAddr) {
 
 	//} else if h.Dst.Equal(s.ipNet.IP) || !s.ipNet.Contains(h.Dst) {
 	} else if s.ipNet.Contains(h.Dst) {
+		log(h, p)
 		udpAddr, exist := s.ipSrcMap[h.Dst.String()]
 		if !exist {
+			log("udpaddr no exist")
 			return
 		}
 
-		conn, err := net.Dial("udp", udpAddr.String())
-		if err != nil {
-			log("dial udp error:", err)
-			return
-		}
+		// conn, err := net.Dial("udp", udpAddr.String())
+		// if err != nil {
+		// 	log("dial udp error:", err)
+		// 	return
+		// }
 
-		defer conn.Close()
-		_, err = conn.Write(p)
+		// defer conn.Close()
+		log("udpaddr:", udpAddr)
+		_, err = s.udpServ.WriteToUDP(p, udpAddr)
 		if err != nil {
 			log("udp write error:", err)
 		}
@@ -76,7 +80,7 @@ func (s *RailgunServer) runTUN() {
 		//DeviceType: water.TAP,
 		DeviceType: water.TUN,
 	}
-	cfg.Name = "tun0"
+	cfg.Name = "tun1"
 
 	ifce, err := water.New(cfg)
 	check(err)
@@ -98,15 +102,17 @@ func (s *RailgunServer) runUDPServ() {
 	udpAddr, _ := net.ResolveUDPAddr("udp", ":7000")
 	udpServ, err := net.ListenUDP("udp", udpAddr)
 	check(err)
-	defer udpServ.Close()
+	s.udpServ = udpServ
+	// defer udpServ.Close()
 
 	buf := make([]byte, 2000)
 
 	for {
-		n, from, err := udpServ.ReadFromUDP(buf)
+		n, from, err := s.udpServ.ReadFromUDP(buf)
 		if err != nil {
 			log("udp recv error:", err)
 		}
+		log("recv from:", from)
 
 		s.handle(buf[:n], from)
 	}
