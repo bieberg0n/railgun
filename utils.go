@@ -1,14 +1,14 @@
-package main
+package railgun
 
 import "fmt"
 
-func check(err error) {
+func Check(err error) {
 	if err != nil {
 		panic(err)
 	}
 }
 
-func log(args... interface{}) {
+func Log(args... interface{}) {
 	fmt.Println(args...)
 }
 
@@ -22,7 +22,18 @@ func log(args... interface{}) {
 //	return int(^sum)
 //}
 
-func checkSum(data []byte) uint16 {
+func checkSum1(msg []byte) uint16 {
+	sum := 0
+	for n := 1; n < len(msg)-1; n += 2 {
+		sum += int(msg[n])*256 + int(msg[n+1])
+	}
+	sum = (sum >> 16) + (sum & 0xffff)
+	sum += (sum >> 16)
+	var ans = uint16(^sum)
+	return ans
+}
+
+func CheckSum(data []byte) uint16 {
 	var (
 		sum    uint32
 		length int = len(data)

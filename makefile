@@ -1,3 +1,3 @@
 main:
-	go build
-	sudo ./railgun
+	go build ./cmd/railgun_server
+	sudo ./railgun_server
