@@ -28,8 +28,6 @@ func (s *RailgunServer) handle(p []byte, from *net.UDPAddr) {
 		return
 	}
 
-	//log(h)
-
 	if from != nil {
 		s.ipSrcMap[h.Src.String()] = from
 	}
@@ -37,15 +35,28 @@ func (s *RailgunServer) handle(p []byte, from *net.UDPAddr) {
 	//if s.ipNet.Contains(h.Dst) && !h.Dst.Equal(s.listenIP) {
 	if h.Dst.Equal(s.listenIP) {
 		log(h, p)
-		conn, err := net.DialIP("ip4:"+strconv.Itoa(h.Protocol), &net.IPAddr{IP: h.Src}, &net.IPAddr{IP: h.Dst})
+		//conn, err := net.DialIP("ip4:"+strconv.Itoa(h.Protocol), &net.IPAddr{IP: h.Src}, &net.IPAddr{IP: h.Dst})
+		//if err != nil {
+		//	log("dial error:", err)
+		//	return
+		//}
+		listener, err := net.ListenPacket("ip4:"+strconv.Itoa(h.Protocol), h.Dst.String())
 		if err != nil {
-			log("dial error:", err)
+			log("listen packet error:", err)
 			return
 		}
-		defer conn.Close()
+		defer listener.Close()
+
+		//defer conn.Close()
+
+		conn, err := ipv4.NewRawConn(listener)
+		if err != nil {
+			log("new raw conn error:", err)
+			return
+		}
 
 		body := p[h.Len:]
-		_, err = conn.Write(body)
+		err = conn.WriteTo(h, body, nil)
 		if err != nil {
 			log("conn write error:", err)
 		}
