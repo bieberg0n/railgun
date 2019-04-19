@@ -46,29 +46,14 @@ func (c *RailgunClient) handle(p []byte) {
 		body := p[h.Len:]
 		err = conn.WriteTo(h, body, nil)
 
-		//conn, err := net.DialIP("ip4:"+strconv.Itoa(h.Protocol), &net.IPAddr{IP: h.Src}, &net.IPAddr{IP: h.Dst})
-		//if err != nil {
-		//	log("dial error:", err)
-		//	return
-		//}
-		//defer conn.Close()
-		//
-		//body := p[h.Len:]
-		//_, err = conn.Write(body)
 		if err != nil {
 			log("conn write error:", err)
 		}
 
 		//} else if h.Dst.Equal(s.ipNet.IP) || !s.ipNet.Contains(h.Dst) {
-	} else if c.ipNet.Contains(h.Dst) {
+		//} else if c.ipNet.Contains(h.Dst) {
+	} else {
 		log(h, p)
-		//conn, err := net.Dial("udp", "bjong.me:7000")
-		//if err != nil {
-		//	log("dial udp error:", err)
-		//	return
-		//}
-		//
-		//defer conn.Close()
 		_, err = c.conn.Write(p)
 		if err != nil {
 			log("udp write error:", err)

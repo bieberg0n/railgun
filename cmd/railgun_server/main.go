@@ -33,21 +33,15 @@ func (s *RailgunServer) handle(p []byte, from *net.UDPAddr) {
 	}
 
 	//if s.ipNet.Contains(h.Dst) && !h.Dst.Equal(s.listenIP) {
-	if h.Dst.Equal(s.listenIP) {
+	if h.Dst.Equal(s.ipNet.IP) || !s.ipNet.Contains(h.Dst) {
+	//if h.Dst.Equal(s.listenIP) {
 		log(h, p)
-		//conn, err := net.DialIP("ip4:"+strconv.Itoa(h.Protocol), &net.IPAddr{IP: h.Src}, &net.IPAddr{IP: h.Dst})
-		//if err != nil {
-		//	log("dial error:", err)
-		//	return
-		//}
 		listener, err := net.ListenPacket("ip4:"+strconv.Itoa(h.Protocol), h.Dst.String())
 		if err != nil {
 			log("listen packet error:", err)
 			return
 		}
 		defer listener.Close()
-
-		//defer conn.Close()
 
 		conn, err := ipv4.NewRawConn(listener)
 		if err != nil {
@@ -70,19 +64,11 @@ func (s *RailgunServer) handle(p []byte, from *net.UDPAddr) {
 			return
 		}
 
-		// conn, err := net.Dial("udp", udpAddr.String())
-		// if err != nil {
-		// 	log("dial udp error:", err)
-		// 	return
-		// }
-
-		// defer conn.Close()
 		log("udpaddr:", udpAddr)
 		_, err = s.udpServ.WriteToUDP(p, udpAddr)
 		if err != nil {
 			log("udp write error:", err)
 		}
-
 	}
 }
 
@@ -114,10 +100,8 @@ func (s *RailgunServer) runUDPServ() {
 	udpServ, err := net.ListenUDP("udp", udpAddr)
 	check(err)
 	s.udpServ = udpServ
-	// defer udpServ.Close()
 
 	buf := make([]byte, 2000)
-
 	for {
 		n, from, err := s.udpServ.ReadFromUDP(buf)
 		if err != nil {
