@@ -6,7 +6,6 @@ import (
 	"golang.org/x/net/ipv4"
 	"net"
 	"railgun"
-	"strconv"
 )
 
 var (
@@ -17,6 +16,7 @@ var (
 type RailgunServer struct {
 	listenIP net.IP
 	ipNet *net.IPNet
+	rawConn *ipv4.RawConn
 	udpServ *net.UDPConn
 	ipSrcMap map[string] *net.UDPAddr
 }
@@ -33,24 +33,12 @@ func (s *RailgunServer) handle(p []byte, from *net.UDPAddr) {
 	}
 
 	//if s.ipNet.Contains(h.Dst) && !h.Dst.Equal(s.listenIP) {
-	if h.Dst.Equal(s.ipNet.IP) || !s.ipNet.Contains(h.Dst) {
+	if h.Dst.Equal(s.listenIP) || !s.ipNet.Contains(h.Dst) {
 	//if h.Dst.Equal(s.listenIP) {
 		log(h, p)
-		listener, err := net.ListenPacket("ip4:"+strconv.Itoa(h.Protocol), h.Dst.String())
-		if err != nil {
-			log("listen packet error:", err)
-			return
-		}
-		defer listener.Close()
-
-		conn, err := ipv4.NewRawConn(listener)
-		if err != nil {
-			log("new raw conn error:", err)
-			return
-		}
 
 		body := p[h.Len:]
-		err = conn.WriteTo(h, body, nil)
+		err = s.rawConn.WriteTo(h, body, nil)
 		if err != nil {
 			log("conn write error:", err)
 		}
@@ -96,11 +84,6 @@ func (s *RailgunServer) runTUN() {
 }
 
 func (s *RailgunServer) runUDPServ() {
-	udpAddr, _ := net.ResolveUDPAddr("udp", ":7000")
-	udpServ, err := net.ListenUDP("udp", udpAddr)
-	check(err)
-	s.udpServ = udpServ
-
 	buf := make([]byte, 2000)
 	for {
 		n, from, err := s.udpServ.ReadFromUDP(buf)
@@ -118,6 +101,18 @@ func NewRailgunServer() *RailgunServer {
 	server.listenIP = net.IPv4(10, 1, 0, 1)
 	_, server.ipNet, _ = net.ParseCIDR("10.1.0.1/24")
 	server.ipSrcMap = make(map[string]*net.UDPAddr)
+
+	var err error
+	listener, err := net.ListenPacket("ip4:1", "")
+	check(err)
+
+	server.rawConn, err = ipv4.NewRawConn(listener)
+	check(err)
+
+	udpAddr, _ := net.ResolveUDPAddr("udp", ":7000")
+	server.udpServ, err = net.ListenUDP("udp", udpAddr)
+	check(err)
+
 	return server
 }
 

@@ -6,7 +6,6 @@ import (
 	"golang.org/x/net/ipv4"
 	"net"
 	"railgun"
-	"strconv"
 )
 
 var (
@@ -17,7 +16,8 @@ var (
 type RailgunClient struct {
 	listenIP net.IP
 	ipNet *net.IPNet
-	conn net.Conn
+	rawConn *ipv4.RawConn
+	udpConn *net.UDPConn
 }
 
 func (c *RailgunClient) handle(p []byte) {
@@ -30,21 +30,8 @@ func (c *RailgunClient) handle(p []byte) {
 	//if s.ipNet.Contains(h.Dst) && !h.Dst.Equal(s.listenIP) {
 	if h.Dst.Equal(c.listenIP) {
 		log(h, p)
-		listener, err := net.ListenPacket("ip4:"+strconv.Itoa(h.Protocol), h.Dst.String())
-		if err != nil {
-			log("listen packet error:", err)
-			return
-		}
-		defer listener.Close()
-
-		conn, err := ipv4.NewRawConn(listener)
-		if err != nil {
-			log("new raw conn error:", err)
-			return
-		}
-
 		body := p[h.Len:]
-		err = conn.WriteTo(h, body, nil)
+		err = c.rawConn.WriteTo(h, body, nil)
 
 		if err != nil {
 			log("conn write error:", err)
@@ -54,7 +41,7 @@ func (c *RailgunClient) handle(p []byte) {
 		//} else if c.ipNet.Contains(h.Dst) {
 	} else {
 		log(h, p)
-		_, err = c.conn.Write(p)
+		_, err = c.udpConn.Write(p)
 		if err != nil {
 			log("udp write error:", err)
 		}
@@ -88,7 +75,7 @@ func (c *RailgunClient) runUDPRecv() {
 	buf := make([]byte, 2000)
 
 	for {
-		n, err := c.conn.Read(buf)
+		n, err := c.udpConn.Read(buf)
 		if err != nil {
 			log("udp recv error:", err)
 		}
@@ -104,12 +91,21 @@ func (c *RailgunClient) Run() {
 
 func NewRailgunClient () *RailgunClient {
 	cli := new(RailgunClient)
+
 	cli.listenIP = net.IPv4(10, 1, 0, 2)
 	_, cli.ipNet, _ = net.ParseCIDR("10.1.0.1/24")
-	conn, err := net.Dial("udp", "bjong.me:7000")
+
+	var err error
+	listener, err := net.ListenPacket("ip4:1", "")
 	check(err)
 
-	cli.conn = conn
+	cli.rawConn, err = ipv4.NewRawConn(listener)
+	check(err)
+
+	udpConn, err := net.Dial("udp", "bjong.me:7000")
+	check(err)
+
+	cli.udpConn = udpConn.(*net.UDPConn)
 	return cli
 }
 
